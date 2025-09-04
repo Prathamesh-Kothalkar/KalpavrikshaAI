@@ -4,38 +4,58 @@ import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import UploadForm from "@/components/dashboard/upload-form"
 import AISuggestions from "@/components/dashboard/ai-suggestions"
-import Storyteller from "@/components/dashboard/storyteller"
+
 
 export default function ArtisanDashboard() {
-  const [desc, setDesc] = useState("")
-  const [image, setImage] = useState<File | null>(null)
-  const imageUrl = useMemo(() => (image ? URL.createObjectURL(image) : undefined), [image])
+  const [description, setDescription] = useState("")
+  
+  const [images, setImages] = useState<File[]>([])
+
+
+  const imageUrls = useMemo(() => 
+    images.map(file => URL.createObjectURL(file)), 
+    [images]
+  )
 
   return (
-    <div className="space-y-6">
-      <h1 className="font-serif text-2xl">Artisan Dashboard</h1>
+    <div className="space-y-6 p-4 md:p-8">
+      <h1 className="font-serif text-3xl font-bold">Artisan Co-pilot Dashboard</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Upload Product</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <UploadForm onDescribe={setDesc} onImage={setImage} />
-          {imageUrl && (
-            <div className="mt-2">
-              <img
-                src={imageUrl || "/placeholder.svg"}
-                alt="Uploaded product preview"
-                className="h-40 w-full rounded-lg object-cover"
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* === UPLOAD SECTION === */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">1. Upload Your Craft</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+           
+            <UploadForm onDescribe={setDescription} onImage={setImages} />
 
-      <AISuggestions description={desc} imageUrl={imageUrl} />
+          
+            {imageUrls.length > 0 && (
+              <div className="mt-4">
+                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Image Previews</h3>
+                <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                  {imageUrls.map((url, index) => (
+                    <div key={index} className="relative aspect-square">
+                      <img
+                        src={url}
+                        alt={`Uploaded product preview ${index + 1}`}
+                        className="h-full w-full rounded-lg object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      <Storyteller description={desc} />
+      
+        <AISuggestions description={description} imageFiles={images} />
+      </div>
+
+      
     </div>
   )
 }

@@ -1,44 +1,92 @@
-import { NextResponse } from "next/server"
+export const runtime = "nodejs"; // Must be at the top
+import { GoogleAuth } from "google-auth-library";
+import { Buffer } from "buffer";
+const PROJECT_ID = process.env.GCP_PROJECT_ID;
+const LOCATION = process.env.GCP_REGION;
+const FIXED_PROMPT =
+  "Take the provided product object from image and place the product on a clean, pure white studio background with realistic, bright, and even lighting. Ensure the product is sharply in focus, well-exposed, and free of distracting elements, optimizing it for e-commerce platforms.";
+const IMAGE_COUNT = 1;
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
+const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/imagen-3.0-capability-001:predict`;
+
+async function getBearerToken() {
+  const auth = new GoogleAuth({
+    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+  });
+  const client = await auth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  return tokenResponse.token;
 }
 
 export async function POST(req) {
   try {
-    
-    const formData = await req.formData()
+    // In Node.js runtime, use multipart parsing manually:
+    const formData = await req.formData();
+    const file = formData.get("file");
 
-    const description = formData.get("description")
-    const images = formData.getAll("images")
+    if (!file || !file.type.startsWith("image/")) {
+      return new Response(JSON.stringify({ error: "Uploaded file is not an image" }), {
+        status: 400,
+      });
+    }
 
-   
-    console.log("Description:", description)
-    console.log("Uploaded files:", images.map((f) => f.name))
+    const arrayBuffer = await file.arrayBuffer();
+    const base64Img = Buffer.from(arrayBuffer).toString("base64");
 
-    // Actual Api gets here 
-    // You would typically call your image editing AI service here
-    // For demonstration, we'll just return the original images with a mock edited URL
+    const body = {
+      instances: [
+        {
+          prompt: FIXED_PROMPT,
+          referenceImages: [
+            {
+              referenceType: "REFERENCE_TYPE_RAW",
+              referenceId: 1,
+              referenceImage: { bytesBase64Encoded: base64Img },
+            },
+          ],
+        },
+      ],
+      parameters: { sampleCount: IMAGE_COUNT },
+    };
 
-    // --- Demo mocked response ---
-    const demoEditedImages = images.map((file, idx) => ({
-      originalName: file.name,
-      editedUrl: `https://placehold.co/600x400?text=Edited+Image+${idx + 1}`,
-    }))
+    const token = await getBearerToken();
 
-    return NextResponse.json({
-      success: true,
-      description,
-      count: images.length,
-      editedImages: demoEditedImages,
-    })
+    const resp = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const error = await resp.text();
+      return new Response(JSON.stringify({ error }), { status: resp.status });
+    }
+
+    const data = await resp.json();
+    const predictions = data.predictions || [];
+
+    if (!predictions.length) {
+      return new Response(JSON.stringify({ error: "No images returned" }), { status: 500 });
+    }
+
+    const imgBase64 = predictions[0].bytesBase64Encoded;
+    const imgBuffer = Buffer.from(imgBase64, "base64");
+
+    return new Response(imgBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": imgBuffer.length.toString(),
+      },
+    });
   } catch (err) {
-    console.error("Error in /api/artisans/upload/imgai:", err)
-    return NextResponse.json(
-      { success: false, error: "Failed to process images" },
+    console.error("API error:", err);
+    return new Response(
+      JSON.stringify({ error: "Internal Server Error", details: err.message }),
       { status: 500 }
-    )
+    );
   }
 }

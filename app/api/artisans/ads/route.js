@@ -9,12 +9,19 @@ const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PR
 
 // Get GCP Bearer Token
 async function getBearerToken() {
+  const b64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!b64) throw new Error("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON");
+  const json = Buffer.from(b64, "base64").toString("utf8");
+  const credentials = JSON.parse(json);
+
   const auth = new GoogleAuth({
+    credentials,
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],
   });
+
   const client = await auth.getClient();
-  const tokenResponse = await client.getAccessToken();
-  return tokenResponse.token;
+  const { token } = await client.getAccessToken();
+  return token;
 }
 
 export async function POST(req) {

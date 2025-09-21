@@ -26,6 +26,10 @@ export default function Navbar() {
           <Link href="/about" className="text-sm hover:text-brand">
             {t("nav.about")}
           </Link>
+          <Link href="/NavKalpana" className="text-sm hover:text-brand">
+            {t("NavKalpana")}
+          </Link>
+          {/* NavKalpana */}
         </div>
         <div className="flex items-center gap-2">
           <LanguageSwitcher />

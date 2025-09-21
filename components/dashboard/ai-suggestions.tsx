@@ -1,11 +1,17 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Image from "next/image"
+import { Play } from "lucide-react"
+import Image from "next/image" // Ensure Image is imported
 
-type Props = { description: string; imageUrl?: string }
+type Props = {
+  description: string;
+  imageUrl?: string;
+  videos: string[]; // New prop for video URLs
+  images: string[]; // New prop for image URLs
+}
 
-export default function AISuggestions({ description, imageUrl }: Props) {
+export default function AISuggestions({ description, imageUrl, videos, images }: Props) {
   const [title, setTitle] = useState("")
 
   useEffect(() => {
@@ -55,45 +61,90 @@ export default function AISuggestions({ description, imageUrl }: Props) {
 
       <Card className="md:col-span-2">
         <CardHeader>
-          <CardTitle className="text-lg">Ad Mockups</CardTitle>
+          <CardTitle className="text-lg">AI Image Mockups</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="relative overflow-hidden rounded-lg border">
-              <div className="absolute left-2 top-2 rounded bg-brand px-2 py-0.5 text-xs text-primary-foreground">
-                AI mockup
+          {images.length > 0 ? (
+            images.map((imgSrc, index) => (
+              <div key={index} className="relative overflow-hidden rounded-lg border">
+                <div className="absolute left-2 top-2 z-10 rounded bg-brand px-2 py-0.5 text-xs text-primary-foreground">
+                  AI mockup
+                </div>
+                <Image
+                  src={imgSrc}
+                  alt={`AI Image Mockup ${index + 1}`}
+                  width={640}
+                  height={360}
+                  className="h-40 w-full object-cover"
+                />
+                <div className="p-3">
+                  <div className="text-sm font-medium">{title}</div>
+                  <div className="text-xs opacity-70">Image Type: {index === 0 ? "Lifestyle Shot" : index === 1 ? "On-location" : "Product Focus"}</div>
+                </div>
               </div>
-              <div className="aspect-video w-full bg-muted" />
-              <div className="p-3">
-                <div className="text-sm font-medium">{title}</div>
-                <div className="text-xs opacity-70">Authentic • Handcrafted • India</div>
+            ))
+          ) : (
+            // Fallback for when no images are provided
+            ["Lifestyle Shot", "On-location", "Product Focus"].map((type, index) => (
+              <div key={index} className="relative overflow-hidden rounded-lg border">
+                <div className="absolute left-2 top-2 z-10 rounded bg-brand px-2 py-0.5 text-xs text-primary-foreground">
+                  AI mockup
+                </div>
+                <div className="aspect-video w-full bg-muted flex items-center justify-center text-muted-foreground relative">
+                  <span className="text-sm opacity-50">{type} Mockup</span>
+                </div>
+                <div className="p-3">
+                  <div className="text-sm font-medium">{title}</div>
+                  <div className="text-xs opacity-70">Image Type: {type}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </CardContent>
       </Card>
 
       <Card className="md:col-span-2">
         <CardHeader>
-          <CardTitle className="text-lg">NavKalpana Mockups</CardTitle>
+          <CardTitle className="text-lg">AI Video Mockups</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="overflow-hidden rounded-lg border">
-              {imageUrl ? (
-                <Image
-                  src={imageUrl || "/placeholder.svg"}
-                  alt="Uploaded product mockup"
-                  width={640}
-                  height={360}
-                  className="h-40 w-full object-cover"
-                />
-              ) : (
-                <div className="h-40 w-full bg-muted" />
-              )}
-              <div className="p-3 text-sm">Display idea #{i}: Shelf/Poster/Social</div>
-            </div>
-          ))}
+          {videos.length > 0 ? (
+            videos.map((videoSrc, index) => (
+              <div key={index} className="relative overflow-hidden rounded-lg border">
+                <div className="absolute left-2 top-2 z-10 rounded bg-brand px-2 py-0.5 text-xs text-primary-foreground">
+                  AI mockup
+                </div>
+                <video
+                  src={videoSrc}
+                  controls
+                  className="h-40 w-full object-cover bg-black"
+                // You might want to add poster, muted, loop for better display in a mockup context
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <div className="p-3">
+                  <div className="text-sm font-medium">{title}</div>
+                  <div className="text-xs opacity-70">Video Type: {index === 0 ? "Story Ad" : index === 1 ? "Reel/Short" : "Product Highlight"}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            // Fallback for when no videos are provided
+            ["Story Ad", "Reel/Short", "Product Highlight"].map((type, index) => (
+              <div key={index} className="relative overflow-hidden rounded-lg border">
+                <div className="absolute left-2 top-2 z-10 rounded bg-brand px-2 py-0.5 text-xs text-primary-foreground">
+                  AI mockup
+                </div>
+                <div className="aspect-video w-full bg-muted flex items-center justify-center text-muted-foreground relative">
+                  <Play className="h-12 w-12 opacity-50" />
+                </div>
+                <div className="p-3">
+                  <div className="text-sm font-medium">{title}</div>
+                  <div className="text-xs opacity-70">Video Type: {type}</div>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

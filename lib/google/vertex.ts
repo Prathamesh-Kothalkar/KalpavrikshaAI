@@ -8,9 +8,7 @@ if (!process.env.GCP_PROJECT_ID) {
 if (!process.env.GCP_REGION) {
   throw new Error('GCP_REGION environment variable is not set.');
 }
-if (!process.env.GCP_CLIENT_EMAIL) {
-  throw new Error('GCP_CLIENT_EMAIL environment variable is not set.');
-}
+
 if (!process.env.GCP_PRIVATE_KEY) {
   throw new Error('GCP_PRIVATE_KEY environment variable is not set.');
 }
@@ -18,12 +16,12 @@ if (!process.env.GCP_PRIVATE_KEY) {
 console.log('All required environment variables are set.');
 console.log('GCP_PROJECT_ID:', process.env.GCP_PROJECT_ID);
 console.log('GCP_REGION:', process.env.GCP_REGION);
-console.log('GCP_CLIENT_EMAIL:', process.env.GCP_CLIENT_EMAIL);
+
 
 const formattedPrivateKey = process.env.GCP_PRIVATE_KEY.replace(/\\n/g, '\n');
 
 const credentials = {
-  client_email: process.env.GCP_CLIENT_EMAIL,
+
   private_key: formattedPrivateKey,
 };
 

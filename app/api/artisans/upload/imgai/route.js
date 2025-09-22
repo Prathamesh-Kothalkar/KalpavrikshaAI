@@ -1,33 +1,49 @@
 export const runtime = "nodejs"; // Must be at the top
+
 import { GoogleAuth } from "google-auth-library";
 import { Buffer } from "buffer";
+import { Storage } from "@google-cloud/storage";
+
 const PROJECT_ID = process.env.GCP_PROJECT_ID;
 const LOCATION = process.env.GCP_REGION;
+const BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+
 const FIXED_PROMPT =
   "Take the provided product object from image and place the product on a clean, pure white studio background with realistic, bright, and even lighting. Ensure the product is sharply in focus, well-exposed, and free of distracting elements, optimizing it for e-commerce platforms.";
-const IMAGE_COUNT = 1;
+const IMAGE_COUNT = 3;
 
 const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/imagen-3.0-capability-001:predict`;
 
+// Initialize GCP Storage
+const storage = new Storage({
+  credentials: JSON.parse(
+    Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, "base64").toString("utf8")
+  ),
+});
+
 async function getBearerToken() {
+  const b64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!b64) throw new Error("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON");
+  const json = Buffer.from(b64, "base64").toString("utf8");
+  const credentials = JSON.parse(json);
+
   const auth = new GoogleAuth({
+    credentials,
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],
   });
+
   const client = await auth.getClient();
-  const tokenResponse = await client.getAccessToken();
-  return tokenResponse.token;
+  const { token } = await client.getAccessToken();
+  return token;
 }
 
 export async function POST(req) {
   try {
-    // In Node.js runtime, use multipart parsing manually:
     const formData = await req.formData();
     const file = formData.get("file");
 
     if (!file || !file.type.startsWith("image/")) {
-      return new Response(JSON.stringify({ error: "Uploaded file is not an image" }), {
-        status: 400,
-      });
+      return new Response(JSON.stringify({ error: "Uploaded file is not an image" }), { status: 400 });
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -72,21 +88,32 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "No images returned" }), { status: 500 });
     }
 
-    const imgBase64 = predictions[0].bytesBase64Encoded;
-    const imgBuffer = Buffer.from(imgBase64, "base64");
+    const savedImageUrls = [];
 
-    return new Response(imgBuffer, {
+    for (let i = 0; i < predictions.length; i++) {
+      const pred = predictions[i];
+      if (!pred.bytesBase64Encoded) continue;
+
+      const imgBuffer = Buffer.from(pred.bytesBase64Encoded, "base64");
+      const fileName = `image_${Date.now()}_${i + 1}.png`;
+      const gcsFile = storage.bucket(BUCKET_NAME).file(fileName);
+
+      await gcsFile.save(imgBuffer, {
+        contentType: "image/png",
+        resumable: false,
+      });
+
+      // Public URL with UBLA enabled
+      const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
+      savedImageUrls.push(publicUrl);
+    }
+
+    return new Response(JSON.stringify({ images: savedImageUrls }), {
       status: 200,
-      headers: {
-        "Content-Type": "image/png",
-        "Content-Length": imgBuffer.length.toString(),
-      },
+      headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("API error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal Server Error", details: err.message }),
-      { status: 500 }
-    );
+    console.error("Error generating AI images:", err);
+    return new Response(JSON.stringify({ error: "Internal Server Error", details: err.message }), { status: 500 });
   }
 }

@@ -1,15 +1,25 @@
 export const runtime = "nodejs"; // Must be at the top
+
 import { GoogleAuth } from "google-auth-library";
 import { Buffer } from "buffer";
-import { writeFileSync } from "fs";
-import path from "path";
+import { Storage } from "@google-cloud/storage";
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID;
 const LOCATION = process.env.GCP_REGION;
+const BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+
 const FIXED_PROMPT =
   "Take the provided product object from image and place the product on a clean, pure white studio background with realistic, bright, and even lighting. Ensure the product is sharply in focus, well-exposed, and free of distracting elements, optimizing it for e-commerce platforms.";
-const IMAGE_COUNT = 3; // Generate 3 images
+const IMAGE_COUNT = 3;
+
 const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/imagen-3.0-capability-001:predict`;
+
+// Initialize GCP Storage
+const storage = new Storage({
+  credentials: JSON.parse(
+    Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, "base64").toString("utf8")
+  ),
+});
 
 async function getBearerToken() {
   const b64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
@@ -78,29 +88,32 @@ export async function POST(req) {
       return new Response(JSON.stringify({ error: "No images returned" }), { status: 500 });
     }
 
-    // Store images locally and collect their paths
     const savedImageUrls = [];
 
-    predictions.forEach((pred, index) => {
-      const imgBase64 = pred.bytesBase64Encoded;
-      const imgBuffer = Buffer.from(imgBase64, "base64");
+    for (let i = 0; i < predictions.length; i++) {
+      const pred = predictions[i];
+      if (!pred.bytesBase64Encoded) continue;
 
-      const filename = `image_${Date.now()}_${index + 1}.png`; // unique filename
-      const filePath = path.join(process.cwd(), "public", filename);
+      const imgBuffer = Buffer.from(pred.bytesBase64Encoded, "base64");
+      const fileName = `image_${Date.now()}_${i + 1}.png`;
+      const gcsFile = storage.bucket(BUCKET_NAME).file(fileName);
 
-      writeFileSync(filePath, imgBuffer);
-      savedImageUrls.push(`/${filename}`); // URL accessible from frontend
-    });
+      await gcsFile.save(imgBuffer, {
+        contentType: "image/png",
+        resumable: false,
+      });
+
+      // Public URL with UBLA enabled
+      const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
+      savedImageUrls.push(publicUrl);
+    }
 
     return new Response(JSON.stringify({ images: savedImageUrls }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("API error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal Server Error", details: err.message }),
-      { status: 500 }
-    );
+    console.error("Error generating AI images:", err);
+    return new Response(JSON.stringify({ error: "Internal Server Error", details: err.message }), { status: 500 });
   }
 }

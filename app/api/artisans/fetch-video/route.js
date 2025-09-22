@@ -1,19 +1,25 @@
 export const runtime = "nodejs";
 
-import { writeFileSync } from "fs";
-import path from "path";
+import { Buffer } from "buffer";
 import { GoogleAuth } from "google-auth-library";
+import { Storage } from "@google-cloud/storage";
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID;
 const LOCATION = process.env.GCP_REGION;
+const BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const MODEL_ID = "veo-3.0-fast-generate-preview";
 
 const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:fetchPredictOperation`;
 
+const storage = new Storage({
+    credentials: JSON.parse(
+        Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, "base64").toString("utf8")
+    ),
+});
+
 async function getBearerToken() {
     const b64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     if (!b64) throw new Error("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON");
-
     const json = Buffer.from(b64, "base64").toString("utf8");
     const credentials = JSON.parse(json);
 
@@ -31,19 +37,14 @@ export async function POST(req) {
     try {
         const { operationName } = await req.json();
         if (!operationName) {
-            return new Response(
-                JSON.stringify({ error: "operationName is required" }),
-                { status: 400 }
-            );
+            return new Response(JSON.stringify({ error: "operationName is required" }), { status: 400 });
         }
 
         const token = await getBearerToken();
+
         const resp = await fetch(ENDPOINT, {
             method: "POST",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-            },
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({ operationName }),
         });
 
@@ -53,42 +54,35 @@ export async function POST(req) {
         }
 
         const data = await resp.json();
-        console.log("Fetch video response:", data);
-
-        if (!data.response?.videos?.length) {
-            return new Response(
-                JSON.stringify({ error: "No videos found in response" }),
-                { status: 404 }
-            );
+        const videos = data.response?.videos;
+        if (!videos?.length) {
+            return new Response(JSON.stringify({ error: "No videos found" }), { status: 404 });
         }
 
-        const base64 = data.response.videos[0].bytesBase64Encoded;
+        const base64 = videos[0].bytesBase64Encoded;
         if (!base64) {
-            return new Response(
-                JSON.stringify({ error: "Video bytes missing" }),
-                { status: 400 }
-            );
+            return new Response(JSON.stringify({ error: "Video bytes missing" }), { status: 400 });
         }
 
         const buffer = Buffer.from(base64, "base64");
+        const operationId = operationName.split("/").pop();
+        const fileName = `video-${operationId}.mp4`;
+        const gcsFile = storage.bucket(BUCKET_NAME).file(fileName);
 
-        // Extract operation ID from operationName
-        const operationId = operationName.split("/").pop(); // gets last part
-        const filePath = path.join(process.cwd(), "public", `${operationId}.mp4`);
-        writeFileSync(filePath, buffer);
+        await gcsFile.save(buffer, {
+            contentType: "video/mp4",
+            resumable: false,
+        });
 
-        return new Response(
-            JSON.stringify({
-                message: "Video saved successfully",
-                fileUrl: `/${operationId}.mp4`,
-            }),
-            { status: 200 }
-        );
+        // Public URL (UBLA)
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
+
+        return new Response(JSON.stringify({ message: "Video saved successfully", fileUrl: publicUrl }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+        });
     } catch (err) {
         console.error("API error:", err);
-        return new Response(
-            JSON.stringify({ error: "Internal Server Error", details: err.message }),
-            { status: 500 }
-        );
+        return new Response(JSON.stringify({ error: "Internal Server Error", details: err.message }), { status: 500 });
     }
 }

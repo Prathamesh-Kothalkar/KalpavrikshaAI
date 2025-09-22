@@ -1,4 +1,4 @@
-export const runtime = "nodejs"; // Required for Next.js API
+export const runtime = "nodejs";
 
 import { GoogleAuth } from "google-auth-library";
 
@@ -7,10 +7,11 @@ const LOCATION = process.env.GCP_REGION;
 const MODEL_ID = "veo-3.0-fast-generate-preview";
 const ENDPOINT = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:predictLongRunning`;
 
-// Get GCP Bearer Token
+// === Get GCP Bearer Token ===
 async function getBearerToken() {
   const b64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!b64) throw new Error("Missing GOOGLE_APPLICATION_CREDENTIALS_JSON");
+
   const json = Buffer.from(b64, "base64").toString("utf8");
   const credentials = JSON.parse(json);
 
@@ -24,26 +25,36 @@ async function getBearerToken() {
   return token;
 }
 
+// === API Route ===
 export async function POST(req) {
   try {
+    console.log("Received request to generate ad video");
     const formData = await req.formData();
     const file = formData.get("file");
-    const prompt = `Create a modern, premium advertisement video featuring this product. " +
-      "Use clean backgrounds, vibrant lighting, smooth transitions, and trending design styles. " +
-      "Make it attractive for Gen Z digital audiences and online marketplaces.`;
+    const description = formData.get("description") || "";
+
     if (!file) {
-      return new Response(JSON.stringify({ error: "file is required" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "file is required" }), {
+        status: 400,
+      });
     }
+
     const arrayBuffer = await file.arrayBuffer();
     const base64Img = Buffer.from(arrayBuffer).toString("base64");
+
+    const prompt = `Create a modern, premium advertisement video featuring this product.
+Use clean backgrounds, vibrant lighting, smooth transitions, and trending design styles.
+Make it attractive for Gen Z digital audiences and online marketplaces.
+${description}`;
+
     const body = {
       instances: [
         {
-          prompt: prompt,
-          "image": {
-            "bytesBase64Encoded": base64Img,
-            "mimeType": file.type
-          }
+          prompt,
+          image: {
+            bytesBase64Encoded: base64Img,
+            mimeType: file.type,
+          },
         },
       ],
       parameters: {
@@ -59,7 +70,6 @@ export async function POST(req) {
     };
 
     const token = await getBearerToken();
-
     const resp = await fetch(ENDPOINT, {
       method: "POST",
       headers: {
@@ -70,13 +80,13 @@ export async function POST(req) {
     });
 
     if (!resp.ok) {
-      const error = await resp.text();
-      return new Response(JSON.stringify({ error }), { status: resp.status });
+      const errorText = await resp.text();
+      return new Response(JSON.stringify({ error: errorText }), {
+        status: resp.status,
+      });
     }
 
-    // Returns operation name (long-running job ID)
     const data = await resp.json();
-
     return new Response(JSON.stringify(data), { status: 200 });
   } catch (err) {
     console.error("API error:", err);
